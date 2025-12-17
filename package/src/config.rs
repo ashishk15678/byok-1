@@ -18,3 +18,6 @@ pub const BASE_FONT_SIZE: f32 = 16.0;
 // other config options
 pub const DEFAULT_WINDOW_WIDTH: f32 = 800.0;
 pub const DEFAULT_WINDOW_HEIGHT: f32 = 600.0;
+
+pub const DIR_ICON: &str = "📁";
+pub const FILE_ICON: &str = "📄";
