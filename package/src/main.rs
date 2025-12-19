@@ -11,27 +11,23 @@ use crate::editor::texteditor::{
     Copy, Cut, NewFile, OpenFile, Paste, Redo, SaveFile, SaveFileAs, TextEditor, Undo,
 };
 use gpui::{
-    App, Application, Bounds, Bounds as GpuiBounds, Context, Element, ElementId, Entity,
-    FocusHandle, GlobalElementId, InputHandler, InspectorElementId, IntoElement, KeyBinding,
-    KeyContext, LayoutId, Menu, MenuItem, MouseButton, Pixels, Point, Style, UTF16Selection,
-    Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Bounds, Context, Entity, FocusHandle, IntoElement, KeyBinding, KeyContext,
+    LayoutId, Menu, MenuItem, MouseButton, Pixels, Point, Style, UTF16Selection, Window,
+    WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
 };
-use std::cell::RefCell;
 use std::env;
-use std::fs;
-use std::ops::Range;
-use std::panic;
-use std::path::PathBuf;
-use std::rc::Rc;
+// use std::path::PathBuf;
+// use std::rc::Rc;
 
 struct MainScreen {
     editor: Entity<TextEditor>,
     file_browser: Entity<FileBrowser>,
     show_browser: bool,
+    show_info_panel: bool,
     focus_handle: FocusHandle,
 }
 
-actions!(MainScreen, [Quit, ToggleBrowser]);
+actions!(MainScreen, [Quit, ToggleBrowser, ToggleInfoPanel]);
 
 impl MainScreen {
     fn new(editor: Entity<TextEditor>, cx: &mut Context<Self>) -> Self {
@@ -41,6 +37,7 @@ impl MainScreen {
             editor,
             file_browser,
             show_browser: true, // Show file browser by default
+            show_info_panel: true,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -49,58 +46,15 @@ impl MainScreen {
         self.show_browser = !self.show_browser;
         cx.notify();
     }
-}
 
-impl Render for TextEditor {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let text = self.get_text();
-        let line_count = text.lines().count().max(1);
-
-        div()
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(TextEditor::new_file))
-            .on_action(cx.listener(TextEditor::open_file))
-            .on_action(cx.listener(TextEditor::save_file))
-            .on_action(cx.listener(TextEditor::save_file_as))
-            .on_action(cx.listener(TextEditor::undo))
-            .on_action(cx.listener(TextEditor::redo))
-            .on_action(cx.listener(TextEditor::cut))
-            .on_action(cx.listener(TextEditor::copy))
-            .on_action(cx.listener(TextEditor::paste))
-            .key_context("Editor")
-            .size_full()
-            .flex()
-            .flex_row()
-            .child(
-                div()
-                    .w_16()
-                    .h_full()
-                    .bg(rgb(0x1e1e1e))
-                    .border_r_1()
-                    .border_color(rgb(0x404040))
-                    .p_2()
-                    .text_color(rgb(0x888888))
-                    .text_sm()
-                    .child(div().flex().flex_col().gap_1().children(
-                        (1..=line_count).map(|i| div().text_right().child(i.to_string())),
-                    )),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .p_4()
-                    .text_sm()
-                    .text_color(rgb(0xcccccc))
-                    .bg(rgb(0x252525))
-                    .child(if text.is_empty() {
-                        div().h_4().child("")
-                    } else {
-                        div().child(text)
-                    })
-                    .child(self.clone()), // Render the Element for input handling
-            )
+    fn toggle_info_panel(
+        &mut self,
+        _: &ToggleInfoPanel,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_info_panel = !self.show_info_panel;
+        cx.notify();
     }
 }
 
@@ -109,6 +63,7 @@ impl Render for MainScreen {
         div()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(MainScreen::toggle_browser))
+            .on_action(cx.listener(MainScreen::toggle_info_panel))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .bg(BACKGROUND_COLOR)
             .text_color(PRIMARY_COLOR)
@@ -119,16 +74,13 @@ impl Render for MainScreen {
                 this.child(
                     div()
                         .flex()
-                        .flex_1()
-                        .size_full()
+                        .h_full()
+                        .flex_none()
                         .child(self.file_browser.clone()),
                 )
             })
-            .child(
-                // Editor view
-                div().flex().flex_1().size_full().child(self.editor.clone()),
-            )
-            .when(self.show_browser, |this| {
+            .child(div().flex().flex_1().size_full().child(self.editor.clone()))
+            .when(self.show_info_panel, |this| {
                 this.child(
                     div()
                         .w_1_4()
@@ -151,7 +103,7 @@ impl Render for MainScreen {
 }
 
 fn main() {
-    let env: Vec<String> = env::args().collect();
+    let _env: Vec<String> = env::args().collect();
     Application::new().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1000.), px(800.0)), cx);
         cx.activate(true);
@@ -183,7 +135,10 @@ fn main() {
                 }),
                 MenuItem::Submenu(Menu {
                     name: "View".into(),
-                    items: vec![MenuItem::action("Toggle Browser", ToggleBrowser)],
+                    items: vec![
+                        MenuItem::action("Toggle Browser", ToggleBrowser),
+                        MenuItem::action("Toggle Info Panel", ToggleInfoPanel),
+                    ],
                 }),
             ],
         };
@@ -196,7 +151,8 @@ fn main() {
             |window, cx| {
                 cx.set_menus(vec![menu]);
                 cx.bind_keys([
-                    KeyBinding::new("ctrl-l", ToggleBrowser, None),
+                    KeyBinding::new("ctrl-b", ToggleBrowser, None),
+                    KeyBinding::new("ctrl-l", ToggleInfoPanel, None),
                     KeyBinding::new("ctrl-n", NewFile, Some("Editor")),
                     KeyBinding::new("ctrl-o", OpenFile, Some("Editor")),
                     KeyBinding::new("ctrl-s", SaveFile, Some("Editor")),
@@ -227,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_keybinding_creation() {
-        let _toggle_browser = KeyBinding::new("ctrl-l", ToggleBrowser, None);
+        let _toggle_browser = KeyBinding::new("ctrl-b", ToggleBrowser, None);
         let _new_file = KeyBinding::new("ctrl-n", NewFile, Some("Editor"));
         assert!(true);
     }

@@ -21,3 +21,6 @@ pub const DEFAULT_WINDOW_HEIGHT: f32 = 600.0;
 
 pub const DIR_ICON: &str = "📁";
 pub const FILE_ICON: &str = "📄";
+
+pub const INITIAL_LOAD_LINES: usize = 100;
+pub const CHUNK_LOAD_LINES: usize = 500;
