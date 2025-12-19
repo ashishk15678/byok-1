@@ -38,23 +38,16 @@ impl Render for TextEditor {
         let text = self.get_text();
         let mut lines: Vec<&str> = text.lines().collect();
         if lines.is_empty() {
-             lines.push("");
+            lines.push("");
         }
         let line_count = lines.len();
-        println!("TextEditor: rendering {} lines", line_count);
-        
-        // Manual Virtual Sorting / Clipping
-        // We assume a fixed view height for logic simplicity or "infinite" but practical scrolling limits.
-        // In a real implementation, we would get the available height from layout.
-        // For now, let's render *only visible lines* based on scroll_y.
-        // We can estimate viewport height roughly or just lookahead.
-        let viewport_height = 800.0; // Estimate
+        let viewport_height = 800.0;
         let start_line = (self.scroll_y / self.line_height).floor() as usize;
         let visible_lines = (viewport_height / self.line_height).ceil() as usize;
         let end_line = std::cmp::min(line_count, start_line + visible_lines);
-        
+
         let start_line = std::cmp::min(start_line, line_count.saturating_sub(1));
-        
+
         // Calculate offset for the content container
         let content_y = -(self.scroll_y % self.line_height);
 
@@ -71,6 +64,12 @@ impl Render for TextEditor {
             .on_action(cx.listener(TextEditor::paste))
             .on_key_down(cx.listener(TextEditor::handle_key_down))
             .on_scroll_wheel(cx.listener(TextEditor::handle_scroll_wheel))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _: &gpui::MouseDownEvent, window, cx| {
+                    window.focus(&this.focus_handle);
+                }),
+            )
             .key_context("Editor")
             .size_full()
             .flex()
@@ -88,15 +87,16 @@ impl Render for TextEditor {
                     // Gutter should also scroll
                     // Implementation simplification: just rendering numbers matching visible content
                     .child(
-                         div()
+                        div()
                             .flex()
                             .flex_col()
-                            .gap_1()
-                             // Offset gutter to match content
+
+                            // Offset gutter to match content
                             .mt(px(content_y))
                             .children(
-                                (start_line..end_line).map(|i| div().text_right().child((i + 1).to_string())),
-                            )
+                                (start_line..end_line)
+                                    .map(|i| div().text_right().child((i + 1).to_string())),
+                            ),
                     ),
             )
             .child(
@@ -106,25 +106,53 @@ impl Render for TextEditor {
                     .flex_1()
                     .p_4()
                     // Clip content that scrolls out
-                    .overflow_hidden() 
+                    .overflow_hidden()
                     .text_sm()
                     .text_color(rgb(0xcccccc))
                     .bg(rgb(0x252525))
                     .child(
-                         div()
-                             // Offset content
+                        div()
+                            // Offset content
                             .mt(px(content_y))
                             .ml(px(-self.scroll_x))
                             .flex()
                             .flex_col()
                             .gap_1() // Match gutter gap
-                            .children(
-                                lines[start_line..end_line].iter().map(|line| {
-                                     // Ensure empty lines have height
-                                     let content = if line.is_empty() { " " } else { *line };
-                                     div().h(px(self.line_height)).child(content.to_string())
-                                })
-                            )
+                            .children(lines[start_line..end_line].iter().enumerate().map(
+                                |(rel_idx, line)| {
+                                    let line_idx = start_line + rel_idx;
+                                    // Ensure empty lines have height
+                                    let content = if line.is_empty() { " " } else { *line };
+
+                                    // Calculate cursor
+                                    let cursor_element = if line_idx == self.cursor_row() {
+                                        let col = self.cursor_col();
+                                        let col = std::cmp::min(col, line.len());
+
+                                        // Split line for cursor
+                                        let (pre, post) = if line.is_empty() {
+                                            ("", "")
+                                        } else if col >= line.len() {
+                                            (*line, "")
+                                        } else {
+                                            line.split_at(col)
+                                        };
+
+                                        div()
+                                            .flex()
+                                            .flex_row()
+                                            .child(pre.to_string())
+                                            .child(
+                                                div().w(px(2.0)).h_full().bg(rgb(0x5cabf5)), // Cursor color
+                                            )
+                                            .child(post.to_string())
+                                    } else {
+                                        div().child(content.to_string())
+                                    };
+
+                                    div().h(px(self.line_height)).child(cursor_element)
+                                },
+                            )),
                     )
                     .child(self.clone()), // Render the Element for input handling
             )
@@ -174,10 +202,8 @@ impl TextEditor {
     }
 
     pub fn open_file_from_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        println!("TextEditor: opening file {:?}", path);
         match fs::read_to_string(&path) {
             Ok(content) => {
-                println!("TextEditor: read content length {}", content.len());
                 self.set_text(content);
                 self.file_path = Some(path);
                 cx.notify();
@@ -188,21 +214,26 @@ impl TextEditor {
         }
     }
 
-    fn handle_scroll_wheel(&mut self, event: &ScrollWheelEvent, _window: &mut Window, cx: &mut Context<Self>) {
-       let delta = event.delta.pixel_delta(px(self.line_height));
-       
+    fn handle_scroll_wheel(
+        &mut self,
+        event: &ScrollWheelEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let delta = event.delta.pixel_delta(px(self.line_height));
+
         // Update scroll_y
         self.scroll_y -= f32::from(delta.y);
         if self.scroll_y < 0.0 {
             self.scroll_y = 0.0;
         }
-        
+
         // Update scroll_x
         self.scroll_x -= f32::from(delta.x);
         if self.scroll_x < 0.0 {
             self.scroll_x = 0.0;
         }
-        
+
         cx.notify();
     }
 
@@ -311,6 +342,21 @@ impl TextEditor {
         } else {
             self.cursor_position = content.len();
         }
+    }
+
+    // Helper methods for cursor rendering
+    fn cursor_row(&self) -> usize {
+        let content = self.content.borrow();
+        content[..self.cursor_position].matches('\n').count()
+    }
+
+    fn cursor_col(&self) -> usize {
+        let content = self.content.borrow();
+        let line_start = content[..self.cursor_position]
+            .rfind('\n')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        self.cursor_position - line_start
     }
 
     fn handle_backspace(&mut self) {

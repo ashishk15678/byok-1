@@ -44,12 +44,12 @@ impl FileBrowser {
         cx.notify();
     }
 
-    fn open_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        println!("FileBrowser: requesting to open {:?}", path);
+    fn open_file(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         if path.is_file() {
             self.selected_file = Some(path.clone());
             self.editor.update(cx, |editor, cx| {
                 editor.open_file_from_path(path, cx);
+                window.focus(&editor.focus_handle);
             });
         }
     }
@@ -111,11 +111,11 @@ impl FileBrowser {
                     .child(format!("{} {}", icon, file_name))
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(move |this, _, _, cx| {
+                        cx.listener(move |this, _, window, cx| {
                             if is_dir {
                                 this.toggle_expand(path_clone.clone(), cx);
                             } else {
-                                this.open_file(path_clone.clone(), cx);
+                                this.open_file(path_clone.clone(), window, cx);
                             }
                         }),
                     );
