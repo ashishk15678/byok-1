@@ -1,5 +1,6 @@
 // pub mod implementations;
 use gpui::actions;
+use serde::Deserialize;
 pub mod DS;
 pub mod config;
 pub mod editor;
@@ -46,8 +47,29 @@ pub struct MainScreen {
 
 actions!(
     MainScreen,
-    [Quit, ToggleBrowser, ToggleInfoPanel, OpenSettings]
+    MainScreen,
+    [Quit, ToggleBrowser, ToggleInfoPanel, OpenSettings, CloseTab]
 );
+
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct SwitchTab {
+    pub index: usize,
+}
+
+impl gpui::Action for SwitchTab {
+    fn name(&self) -> &str { "SwitchTab" }
+    fn name_for_type() -> &'static str { "SwitchTab" }
+    fn build(value: serde_json::Value) -> gpui::Result<Box<dyn gpui::Action>> {
+        let action: SwitchTab = serde_json::from_value(value)?;
+        Ok(Box::new(action))
+    }
+    fn boxed_clone(&self) -> Box<dyn gpui::Action> {
+        Box::new(self.clone())
+    }
+    fn partial_eq(&self, action: &dyn gpui::Action) -> bool {
+        action.as_any().downcast_ref::<Self>().map_or(false, |a| self == a)
+    }
+}
 
 // Ensure payload struct is compatible if using actions! with payload?
 // actually actions! macro defines unit structs or structs that derive Deserialize.
@@ -113,7 +135,8 @@ impl MainScreen {
         } else {
             // Create new editor
             let path = action.path.clone(); // Clone path to use in closure
-            let state = self.state.clone();
+            // Create a NEW state for the new tab/file
+            let state = cx.new(|_| AppState::new());
             let editor = cx.new(|cx| {
                 let mut editor = TextEditor::new(cx, state);
                 editor.open_file_from_path(path, cx);
@@ -155,6 +178,25 @@ impl MainScreen {
         self.show_info_panel = !self.show_info_panel;
         cx.notify();
     }
+    
+    fn switch_tab(&mut self, action: &SwitchTab, _: &mut Window, cx: &mut Context<Self>) {
+        if action.index < self.items.len() {
+            self.active_item_index = action.index;
+            cx.notify();
+        }
+    }
+    
+    fn close_tab(&mut self, _: &CloseTab, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.items.is_empty() {
+             self.items.remove(self.active_item_index);
+             if self.active_item_index >= self.items.len() && !self.items.is_empty() {
+                 self.active_item_index = self.items.len() - 1;
+             } else if self.items.is_empty() {
+                 self.active_item_index = 0;
+             }
+             cx.notify();
+        }
+    }
 }
 
 impl Render for MainScreen {
@@ -167,6 +209,8 @@ impl Render for MainScreen {
             .on_action(cx.listener(MainScreen::toggle_info_panel))
             .on_action(cx.listener(MainScreen::open_path))
             .on_action(cx.listener(MainScreen::open_settings))
+            .on_action(cx.listener(MainScreen::switch_tab))
+            .on_action(cx.listener(MainScreen::close_tab))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .bg(BACKGROUND_COLOR)
             .text_color(PRIMARY_COLOR)
@@ -189,13 +233,64 @@ impl Render for MainScreen {
                                 .child(self.file_browser.clone()),
                         )
                     })
-                    // Render Active Item
                     .child(
                         div()
                             .flex()
+                            .flex_col()
                             .flex_1()
                             .size_full()
-                            .children(active_item.map(|item| item.render(cx))),
+                            // Tab Bar
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .h_8()
+                                    .bg(rgb(0x252526))
+                                    .text_color(rgb(0xcccccc))
+                                    .children(
+                                        self.items.iter().enumerate().map(|(i, item)| {
+                                            let is_active = i == self.active_item_index;
+                                            let title = match item {
+                                                WorkspaceItem::Editor(e) => {
+                                                    // This is tricky without read access to appstate or editor model easily here
+                                                    // Assume "Editor" for now or try to get file path if we could.
+                                                    // Actually we can't easily read entity state inside render without window context, 
+                                                    // but we have window context.
+                                                    // For now: "Editor"
+                                                    "Editor"
+                                                }
+                                                WorkspaceItem::Settings(_) => "Settings",
+                                            };
+                                            
+                                            div()
+                                                .h_full()
+                                                .px_3()
+                                                .flex()
+                                                .items_center()
+                                                .bg(if is_active { rgb(0x1e1e1e) } else { rgb(0x2d2d2d) })
+                                                .border_r_1()
+                                                .border_color(rgb(0x1e1e1e))
+                                                .cursor_pointer()
+                                                .on_click(cx.listener(move |_, _, cx| {
+                                                    cx.dispatch_action(SwitchTab { index: i });
+                                                }))
+                                                .child(title)
+                                                .when(is_active, |this| {
+                                                    this.child(
+                                                        div()
+                                                            .ml_2()
+                                                            .child("x")
+                                                            .hover(|s| s.text_color(rgb(0xffffff)))
+                                                            .on_click(cx.listener(|_, _, cx| {
+                                                                cx.dispatch_action(CloseTab);
+                                                            }))
+                                                    )
+                                                })
+                                        })
+                                    )
+                            )
+                            // Content
+                            .child(active_item.map(|item| item.render(cx))),
                     ),
             )
         // Info panel if needed... (omitted for brevity in this replace, can add back if important, user commented it out in their previous edit so I might leave it out or re-add)

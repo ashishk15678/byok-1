@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      # - dev
+      - fix-release-workflow
+  pull_request:
+    branches:
+      - main
+      # - dev
+      - fix-release-workflow
+
+jobs:
+  compile:
+    name: Compile Check (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    defaults:
+      run:
+        working-directory: package
+
+    steps:
+      # 1. Checkout
+      - uses: actions/checkout@v4
+
+      # 2. Setup Rust
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          override: true
+
+      # 3. Cache cargo
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            package/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('package/Cargo.lock') }}
+
+      # 4. Format
+      - name: Rust fmt
+        run: cargo fmt --check
+
+      # 5. Clippy
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # 6. Compile
+      - name: Compile
+        run: cargo build

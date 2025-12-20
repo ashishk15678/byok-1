@@ -5,7 +5,7 @@ use gpui::{InteractiveElement, ParentElement, Render, Styled, actions, div, rgb}
 use gpui::{
     App, Bounds as GpuiBounds, Context, Element, ElementId, FocusHandle, GlobalElementId,
     InputHandler, InspectorElementId, IntoElement, KeyContext, KeyDownEvent, LayoutId, Pixels,
-    Point, ScrollWheelEvent, Style, UTF16Selection, Window, px,
+    Point, ScrollWheelEvent, Style, UTF16Selection, Window, px, ClipboardItem, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
 };
 use std::cell::RefCell;
 use std::fs;
@@ -29,6 +29,7 @@ pub struct TextEditor {
     scroll_x: f32,
     scroll_y: f32,
     line_height: f32,
+    is_selecting: bool,
 }
 
 actions!(
@@ -74,12 +75,16 @@ impl Render for TextEditor {
             .on_action(cx.listener(TextEditor::paste))
             .on_key_down(cx.listener(TextEditor::handle_key_down))
             .on_scroll_wheel(cx.listener(TextEditor::handle_scroll_wheel))
+            .on_scroll_wheel(cx.listener(TextEditor::handle_scroll_wheel))
             .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(|this, _: &gpui::MouseDownEvent, window, cx| {
-                    window.focus(&this.focus_handle);
-                }),
+                MouseButton::Left,
+                cx.listener(TextEditor::handle_mouse_down),
             )
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(TextEditor::handle_mouse_up),
+            )
+            .on_mouse_move(cx.listener(TextEditor::handle_mouse_move))
             .key_context("Editor")
             .size_full()
             .flex()
@@ -183,6 +188,7 @@ impl TextEditor {
             scroll_y: 0.0,
             undo_tree: UndoTree::new(""),
             line_height: 20.0, // Approximation, should ideally be measured
+            is_selecting: false,
         }
     }
 
@@ -622,15 +628,72 @@ impl TextEditor {
         cx.notify();
     }
 
-    pub fn cut(&mut self, _: &Cut, _window: &mut Window, cx: &mut Context<Self>) {
-        cx.notify();
+    pub fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(selection) = &self.selection {
+            let text = self.model.read(cx).text.clone();
+            if selection.end <= text.len() {
+                let selected_text = text[selection.clone()].to_string();
+                window.write_to_clipboard(ClipboardItem::new(selected_text));
+                
+                // Delete selection
+                self.model.update(cx, |model, _| {
+                    model.text.replace_range(selection.clone(), "");
+                });
+                self.cursor_position = selection.start;
+                self.selection = None;
+                cx.notify();
+            }
+        }
     }
 
-    pub fn copy(&mut self, _: &Copy, _window: &mut Window, cx: &mut Context<Self>) {
-        cx.notify();
+    pub fn copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(selection) = &self.selection {
+            let text = self.model.read(cx).text.clone();
+            if selection.end <= text.len() {
+                let selected_text = text[selection.clone()].to_string();
+                window.write_to_clipboard(ClipboardItem::new(selected_text));
+            }
+        }
     }
 
-    pub fn paste(&mut self, _: &Paste, _window: &mut Window, cx: &mut Context<Self>) {
+    pub fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(item) = window.read_from_clipboard() {
+             if let Some(s) = item.text() {
+                 self.insert_text_at_cursor(s, cx);
+                 cx.notify();
+             }
+        }
+    }
+    
+    // Mouse Handling
+    fn handle_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle);
+        let point = event.position;
+        // Simplify: Assume fixed relative position for now (not ideal but better than nothing without hit testing properly)
+        // In real GPUI we'd use hit testing or calculate relative to element bounds.
+        // For now, let's just use a placeholder or basic heuristic if possible.
+        // Actually, without `Element::hit_test` or accessing layout bounds, exact mapping is hard in `handle_mouse_`.
+        // BUT we can track state and rely on `character_index_for_point` if we were using the text system fully.
+        // Let's implement basic "click clears selection" for now and maybe "click moves cursor" if we can guess lines.
+        // TODO: Implement proper hit testing mapping.
+        
+        self.selection = None;
+        self.is_selecting = true;
+        
+        // Placeholder for cursor move:
+        // We need layout bounds to map point -> row/col.
+        // Skipping exact cursor placement for this step to avoid massive complexity without bounds info.
         cx.notify();
+    }
+    
+    fn handle_mouse_up(&mut self, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.is_selecting = false;
+        cx.notify();
+    }
+    
+    fn handle_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.is_selecting {
+             // Drag selection logic would go here
+        }
     }
 }
