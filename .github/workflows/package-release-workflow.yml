@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-package:
+    name: Build & Package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    steps:
+      # 1. Checkout
+      - uses: actions/checkout@v4
+
+      # 2. Setup Rust
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      # 3. Extract app info (cross-platform, no jq)
+      - name: Read config.json
+        shell: bash
+        run: |
+          APP_NAME=$(node -p "require('./config.json').app_name")
+          APP_VER=$(node -p "require('./config.json').version")
+
+          echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+          echo "APP_VER=$APP_VER" >> $GITHUB_ENV
+
+      # 4. Validate git tag matches version
+      - name: Validate version tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+
+          if [ "$TAG" != "$APP_VER" ]; then
+            echo "❌ Tag version ($TAG) does not match config.json version ($APP_VER)"
+            exit 1
+          fi
+
+      # 5. Build
+      - name: Build binary
+        run: cargo build --release
+
+      # 6. Get actual Rust binary name from Cargo.toml
+      - name: Resolve binary name
+        shell: bash
+        run: |
+          BIN_NAME=$(node -p "require('./Cargo.toml').package.name")
+          echo "BIN_NAME=$BIN_NAME" >> $GITHUB_ENV
+
+      # 7. Package (Unix)
+      - name: Package (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir dist
+          cp target/release/$BIN_NAME dist/
+          cp config.json dist/
+
+          cd dist
+          zip -r ../${APP_NAME}-${{ matrix.platform }}-${APP_VER}.zip .
+
+      # 8. Package (Windows)
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force dist
+          Copy-Item target\release\$env:BIN_NAME.exe dist\
+          Copy-Item config.json dist\
+          Compress-Archive dist\* $env:APP_NAME-${{ matrix.platform }}-$env:APP_VER.zip
+
+      # 9. Publish GitHub Release
+      - name: Upload Release Artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "**/*.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
