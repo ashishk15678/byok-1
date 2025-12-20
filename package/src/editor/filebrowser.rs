@@ -13,14 +13,13 @@ pub struct FileBrowser {
     root_path: PathBuf,
     selected_file: Option<PathBuf>,
     expanded_paths: HashSet<PathBuf>,
-    editor: Entity<TextEditor>,
     // State for resizing
     width: f32,
     is_resizing: bool,
 }
 
 impl FileBrowser {
-    pub fn new(editor: Entity<TextEditor>, _cx: &mut Context<Self>) -> Self {
+    pub fn new(_cx: &mut Context<Self>) -> Self {
         let root = PathBuf::from(".");
         let mut expanded = HashSet::new();
         expanded.insert(root.clone()); // Expand root by default
@@ -29,7 +28,6 @@ impl FileBrowser {
             root_path: root,
             selected_file: None,
             expanded_paths: expanded,
-            editor,
             width: 256.0,
             is_resizing: false,
         }
@@ -47,10 +45,7 @@ impl FileBrowser {
     fn open_file(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         if path.is_file() {
             self.selected_file = Some(path.clone());
-            self.editor.update(cx, |editor, cx| {
-                editor.open_file_from_path(path, cx);
-                window.focus(&editor.focus_handle);
-            });
+            window.dispatch_action(Box::new(crate::OpenPath { path }), cx);
         }
     }
 
@@ -167,7 +162,14 @@ impl Render for FileBrowser {
                             .py_2()
                             .text_color(rgb(0x888888))
                             .text_xs()
-                            .child(format!("PROJECT: {}", root_path_str)),
+                            .child(
+                                root_path_str
+                                    .split('/')
+                                    .last()
+                                    .unwrap_or(&root_path_str)
+                                    .to_string()
+                                    .to_uppercase(),
+                            ),
                     )
                     .child(
                         div()

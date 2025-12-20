@@ -11,6 +11,8 @@ pub const SECONDARY_COLOR: Rgba = hex_to_rgba(0x2ecc71);
 pub const ACCENT_COLOR: Rgba = hex_to_rgba(0xe74c3c);
 pub const BACKGROUND_COLOR: Rgba = hex_to_rgba(0x292929);
 
+pub const DEBUG: bool = false;
+
 // fonts
 pub const FONT_FAMILY: &str = "Roboto";
 pub const BASE_FONT_SIZE: f32 = 16.0;
