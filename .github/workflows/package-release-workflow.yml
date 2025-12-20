@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    # tags:
+    #   - "v*"
     branches:
       - fix-release-workflow
 
@@ -34,24 +34,24 @@ jobs:
           toolchain: stable
           override: true
 
-      # 3. Extract app info (cross-platform, no jq)
+      # 3. Read config.json (safe, cross-platform)
       - name: Read config.json
         shell: bash
         run: |
-          APP_NAME=$(node -p "require('./config.json').APP_NAME")
-          APP_VER=$(node -p "require('./config.json').VERSION")
+          APP_NAME=$(node -p "require('./config.json').app_name")
+          APP_VER=$(node -p "require('./config.json').version")
 
           echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
           echo "APP_VER=$APP_VER" >> $GITHUB_ENV
 
-      # 4. Validate git tag matches VERSION
+      # 4. Validate git tag version
       - name: Validate version tag
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
 
           if [ "$TAG" != "$APP_VER" ]; then
-            echo "❌ Tag version ($TAG) does not match config.json VERSION ($APP_VER)"
+            echo "❌ Tag version ($TAG) does not match config.json version ($APP_VER)"
             exit 1
           fi
 
@@ -59,14 +59,18 @@ jobs:
       - name: Build binary
         run: cargo build --release
 
-      # 6. Get actual Rust binary name from Cargo.toml
+      # 6. Resolve Rust binary name (correct way)
       - name: Resolve binary name
         shell: bash
         run: |
-          BIN_NAME=$(node -p "require('./Cargo.toml').package.name")
+          BIN_NAME=$(cargo metadata --no-deps --format-version 1 | node -p "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync(0, 'utf8'));
+            m.packages[0].name
+          ")
           echo "BIN_NAME=$BIN_NAME" >> $GITHUB_ENV
 
-      # 7. Package (Unix)
+      # 7. Package (Linux / macOS)
       - name: Package (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
