@@ -15,7 +15,7 @@ impl WorkspaceItem {
         }
     }
     
-    pub fn render(&self, cx: &mut Context<crate::MainScreen>) -> AnyElement {
+    pub fn render(&self, cx: &mut Context<crate::ui::workspace::MainScreen>) -> AnyElement {
          match self {
             WorkspaceItem::Editor(editor) => editor.clone().into_any_element(),
             WorkspaceItem::Settings(settings) => settings.clone().into_any_element(),
