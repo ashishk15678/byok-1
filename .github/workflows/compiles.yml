@@ -61,12 +61,12 @@ jobs:
       # removed formatting because default rust based formatting is different than many editors/IDEs
       # 4. Clippy
       - name: Run Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features
-          working-directory: package
-          fail-on-warnings: false
+        # uses: actions-rs/clippy-check@v1
+        run: cargo clippy --all-targets --all-features
+        # with:
+        #   token: ${{ secrets.GITHUB_TOKEN }}
+        #   args: --all-targets --all-features
+        #   fail-on-warnings: false
 
       # 5. Compile
       - name: Compile
