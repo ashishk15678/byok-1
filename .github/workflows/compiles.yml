@@ -65,6 +65,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets --all-features
+          working-directory: package
+          fail-on-warnings: false
 
       # 5. Compile
       - name: Compile

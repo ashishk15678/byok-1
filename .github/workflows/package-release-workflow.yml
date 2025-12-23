@@ -2,10 +2,10 @@ name: Release
 
 on:
   push:
-    # tags:
-    #   - "v*"
-    branches:
-      - fix-release-workflow
+    tags:
+      - "v*"
+    # branches:
+    #   - fix-release-workflow
 
 jobs:
   build-and-package:
