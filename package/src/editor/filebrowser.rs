@@ -5,6 +5,7 @@ use gpui::{
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::ui::workspace::OpenPath;
 
 use crate::config::{DIR_ICON, FILE_ICON};
 use crate::editor::texteditor::TextEditor;
@@ -45,7 +46,7 @@ impl FileBrowser {
     fn open_file(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         if path.is_file() {
             self.selected_file = Some(path.clone());
-            window.dispatch_action(Box::new(crate::OpenPath { path }), cx);
+            window.dispatch_action(Box::new(OpenPath { path }), cx);
         }
     }
 

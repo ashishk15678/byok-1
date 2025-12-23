@@ -2,10 +2,13 @@
 use gpui::{InteractiveElement, ParentElement, Render, Styled, actions, div, rgb};
 
 // use crate::config::{CHUNK_LOAD_LINES, INITIAL_LOAD_LINES};
+use crate::state::appstate::AppState;
+use gpui::Entity;
 use gpui::{
-    App, Bounds as GpuiBounds, Context, Element, ElementId, FocusHandle, GlobalElementId,
-    InputHandler, InspectorElementId, IntoElement, KeyContext, KeyDownEvent, LayoutId, Pixels,
-    Point, ScrollWheelEvent, Style, UTF16Selection, Window, px, ClipboardItem, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    App, Bounds as GpuiBounds, ClipboardItem, Context, Element, ElementId, FocusHandle,
+    GlobalElementId, InputHandler, InspectorElementId, IntoElement, KeyContext, KeyDownEvent,
+    LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    ScrollWheelEvent, Style, UTF16Selection, Window, px,
 };
 use std::cell::RefCell;
 use std::fs;
@@ -13,10 +16,8 @@ use std::ops::Range;
 use std::panic;
 use std::path::PathBuf;
 use std::rc::Rc;
-use crate::state::appstate::AppState;
-use gpui::Entity;
 
-use crate::DS::tree::UndoTree;
+use crate::structs::tree::UndoTree;
 
 #[derive(Clone)]
 pub struct TextEditor {
@@ -24,7 +25,7 @@ pub struct TextEditor {
     cursor_position: usize,
     selection: Option<Range<usize>>,
     pub focus_handle: FocusHandle,
-    file_path: Option<PathBuf>,
+    pub file_path: Option<PathBuf>,
     undo_tree: UndoTree,
     scroll_x: f32,
     scroll_y: f32,
@@ -80,10 +81,7 @@ impl Render for TextEditor {
                 MouseButton::Left,
                 cx.listener(TextEditor::handle_mouse_down),
             )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(TextEditor::handle_mouse_up),
-            )
+            .on_mouse_up(MouseButton::Left, cx.listener(TextEditor::handle_mouse_up))
             .on_mouse_move(cx.listener(TextEditor::handle_mouse_move))
             .key_context("Editor")
             .size_full()
@@ -91,14 +89,16 @@ impl Render for TextEditor {
             .flex_row()
             .child(
                 div()
-                    .w_16()
+                    .w_8()
                     .h_full()
                     // .bg(rgb(0x1e1e1e))
                     // .border_r_1()
                     .border_color(rgb(0x404040))
-                    .p_1()
+                    .px_1()
                     .text_color(rgb(0x888888))
                     .text_sm()
+                    .flex()
+                    .justify_start()
                     // Gutter should also scroll
                     // Implementation simplification: just rendering numbers matching visible content
                     .child(
@@ -123,7 +123,7 @@ impl Render for TextEditor {
                     .overflow_hidden()
                     .text_sm()
                     .text_color(rgb(0xcccccc))
-                    .bg(rgb(0x252525))
+                    // .bg(rgb(0x252525))
                     .child(
                         div()
                             // Offset content
@@ -157,13 +157,13 @@ impl Render for TextEditor {
                                             .flex_row()
                                             .child(pre.to_string())
                                             .child(
-                                                div().w(px(2.0)).h_full().bg(rgb(0x5cabf5)), // Cursor color
+                                                div().w(px(2.0)).h_full().bg(rgb(0xffffff)), // Cursor color White
                                             )
                                             .child(post.to_string())
                                     } else {
                                         div().child(content.to_string())
                                     };
-                                    
+
                                     div().h(px(line_height)).child(cursor_element)
                                 },
                             )),
@@ -198,7 +198,7 @@ impl TextEditor {
 
     pub fn set_text(&mut self, text: String, cx: &mut Context<Self>) {
         let text_clone = text.clone();
-        self.model.update(cx, |model, _| model.text = text); 
+        self.model.update(cx, |model, _| model.text = text);
         self.cursor_position = text_clone.len();
         self.selection = None;
         self.scroll_x = 0.0;
@@ -210,7 +210,7 @@ impl TextEditor {
         let selection = self.selection.clone();
         let old_cursor_pos = self.cursor_position;
         let text_owned = text.to_string();
-        
+
         let new_cursor_pos = self.model.update(cx, move |model, _| {
             let content = &mut model.text;
             if let Some(selection) = selection {
@@ -225,7 +225,7 @@ impl TextEditor {
                 pos + text_owned.len()
             }
         });
-        
+
         self.cursor_position = new_cursor_pos;
         self.selection = None;
     }
@@ -283,7 +283,7 @@ impl TextEditor {
             "delete" => self.handle_delete(cx),
             "enter" => self.handle_enter(cx),
             _ => {
-               // Do nothing for default keys, rely on InputHandler
+                // Do nothing for default keys, rely on InputHandler
             }
         }
         cx.notify();
@@ -294,9 +294,7 @@ impl TextEditor {
             self.cursor_position -= 1;
             // Handle utf8 char boundaries if necessary, simplified for now
             let text = &self.model.read(cx).text;
-            while !text.is_char_boundary(self.cursor_position)
-                && self.cursor_position > 0
-            {
+            while !text.is_char_boundary(self.cursor_position) && self.cursor_position > 0 {
                 self.cursor_position -= 1;
             }
         }
@@ -307,9 +305,7 @@ impl TextEditor {
         let len = text.len();
         if self.cursor_position < len {
             self.cursor_position += 1;
-            while !text.is_char_boundary(self.cursor_position)
-                && self.cursor_position < len
-            {
+            while !text.is_char_boundary(self.cursor_position) && self.cursor_position < len {
                 self.cursor_position += 1;
             }
         }
@@ -461,31 +457,31 @@ impl InputHandler for TextEditor {
                     None
                 }
             });
-            
+
             if let Some(pos) = new_pos {
                 self.cursor_position = pos;
             }
         } else {
-             // Inline insert logic here
-             let selection = self.selection.clone();
-             let old_cursor_pos = self.cursor_position;
-             let text_owned = text.to_string();
+            // Inline insert logic here
+            let selection = self.selection.clone();
+            let old_cursor_pos = self.cursor_position;
+            let text_owned = text.to_string();
 
-             let new_cursor_pos = self.model.update(app, move |model, _| {
-                 let content = &mut model.text;
-                 if let Some(selection) = selection {
-                     content.replace_range(selection.clone(), &text_owned);
-                     selection.start + text_owned.len()
-                 } else {
-                     let mut pos = old_cursor_pos;
-                     if pos > content.len() {
-                         pos = content.len();
-                     }
-                     content.insert_str(pos, &text_owned);
-                     pos + text_owned.len()
-                 }
-             });
-             self.cursor_position = new_cursor_pos;
+            let new_cursor_pos = self.model.update(app, move |model, _| {
+                let content = &mut model.text;
+                if let Some(selection) = selection {
+                    content.replace_range(selection.clone(), &text_owned);
+                    selection.start + text_owned.len()
+                } else {
+                    let mut pos = old_cursor_pos;
+                    if pos > content.len() {
+                        pos = content.len();
+                    }
+                    content.insert_str(pos, &text_owned);
+                    pos + text_owned.len()
+                }
+            });
+            self.cursor_position = new_cursor_pos;
         }
         self.selection = None;
     }
@@ -597,7 +593,10 @@ impl TextEditor {
             if test_file.exists() {
                 self.open_file_from_path(test_file, cx);
             } else {
-                self.set_text("// No file selected. Use file browser to open files.\n".to_string(), cx);
+                self.set_text(
+                    "// No file selected. Use file browser to open files.\n".to_string(),
+                    cx,
+                );
                 cx.notify();
             }
         }
@@ -628,13 +627,13 @@ impl TextEditor {
         cx.notify();
     }
 
-    pub fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn cut(&mut self, _: &Cut, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(selection) = &self.selection {
             let text = self.model.read(cx).text.clone();
             if selection.end <= text.len() {
                 let selected_text = text[selection.clone()].to_string();
-                window.write_to_clipboard(ClipboardItem::new(selected_text));
-                
+                cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
+
                 // Delete selection
                 self.model.update(cx, |model, _| {
                     model.text.replace_range(selection.clone(), "");
@@ -646,27 +645,32 @@ impl TextEditor {
         }
     }
 
-    pub fn copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn copy(&mut self, _: &Copy, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(selection) = &self.selection {
             let text = self.model.read(cx).text.clone();
             if selection.end <= text.len() {
                 let selected_text = text[selection.clone()].to_string();
-                window.write_to_clipboard(ClipboardItem::new(selected_text));
+                cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
             }
         }
     }
 
-    pub fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(item) = window.read_from_clipboard() {
-             if let Some(s) = item.text() {
-                 self.insert_text_at_cursor(s, cx);
-                 cx.notify();
-             }
+    pub fn paste(&mut self, _: &Paste, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(item) = cx.read_from_clipboard() {
+            if let Some(s) = item.text() {
+                self.insert_text_at_cursor(&s, cx);
+                cx.notify();
+            }
         }
     }
-    
+
     // Mouse Handling
-    fn handle_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn handle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         window.focus(&self.focus_handle);
         let point = event.position;
         // Simplify: Assume fixed relative position for now (not ideal but better than nothing without hit testing properly)
@@ -676,24 +680,29 @@ impl TextEditor {
         // BUT we can track state and rely on `character_index_for_point` if we were using the text system fully.
         // Let's implement basic "click clears selection" for now and maybe "click moves cursor" if we can guess lines.
         // TODO: Implement proper hit testing mapping.
-        
+
         self.selection = None;
         self.is_selecting = true;
-        
+
         // Placeholder for cursor move:
         // We need layout bounds to map point -> row/col.
         // Skipping exact cursor placement for this step to avoid massive complexity without bounds info.
         cx.notify();
     }
-    
+
     fn handle_mouse_up(&mut self, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.is_selecting = false;
         cx.notify();
     }
-    
-    fn handle_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+
+    fn handle_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.is_selecting {
-             // Drag selection logic would go here
+            // Drag selection logic would go here
         }
     }
 }
