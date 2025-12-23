@@ -12,6 +12,10 @@ on:
       # - dev
       - fix-release-workflow
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   compile:
     name: Compile Check (${{ matrix.platform }})
