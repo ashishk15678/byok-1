@@ -16,6 +16,10 @@ jobs:
     name: Build & Package (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
 
+    defaults:
+      run:
+        working-directory: package
+
     strategy:
       fail-fast: false
       matrix:
