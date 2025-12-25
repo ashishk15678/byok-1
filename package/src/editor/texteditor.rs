@@ -76,7 +76,6 @@ impl Render for TextEditor {
             .on_action(cx.listener(TextEditor::paste))
             .on_key_down(cx.listener(TextEditor::handle_key_down))
             .on_scroll_wheel(cx.listener(TextEditor::handle_scroll_wheel))
-            .on_scroll_wheel(cx.listener(TextEditor::handle_scroll_wheel))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(TextEditor::handle_mouse_down),
@@ -231,7 +230,8 @@ impl TextEditor {
     }
 
     pub fn open_file_from_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        match fs::read_to_string(&path) {
+        let pools = self.model.read(cx).pools.clone();
+        match pools.resources.open_file(&path) {
             Ok(content) => {
                 self.set_text(content, cx);
                 self.file_path = Some(path);
@@ -252,6 +252,7 @@ impl TextEditor {
         let delta = event.delta.pixel_delta(px(self.line_height));
 
         // Update scroll_y
+
         self.scroll_y -= f32::from(delta.y);
         if self.scroll_y < 0.0 {
             self.scroll_y = 0.0;
@@ -404,6 +405,29 @@ impl TextEditor {
 
     fn handle_enter(&mut self, cx: &mut Context<Self>) {
         self.insert_text_at_cursor("\n", cx);
+    }
+
+    pub fn find_next(&mut self, query: &str, cx: &mut Context<Self>) {
+        if query.is_empty() { return; }
+        let text = self.model.read(cx).text.clone();
+        
+        // Simple search from cursor position
+        if let Some(idx) = text[self.cursor_position..].find(query) {
+            let start = self.cursor_position + idx;
+            let end = start + query.len();
+            self.selection = Some(start..end);
+            self.cursor_position = end;
+            cx.notify();
+        } else {
+             // Wrap around
+             if let Some(idx) = text.find(query) {
+                let start = idx;
+                let end = start + query.len();
+                self.selection = Some(start..end);
+                self.cursor_position = end;
+                cx.notify();
+             }
+        }
     }
 }
 
@@ -604,7 +628,9 @@ impl TextEditor {
 
     pub fn save_file(&mut self, _: &SaveFile, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(ref path) = self.file_path {
-            if let Err(e) = fs::write(path, self.get_text(cx)) {
+            let content = self.get_text(cx);
+            let app_state = self.model.read(cx);
+            if let Err(e) = app_state.pools.resources.save_file(path, content) {
                 eprintln!("Failed to save file: {}", e);
             } else {
                 cx.notify();

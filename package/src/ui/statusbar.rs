@@ -1,7 +1,6 @@
 use gpui::*;
 
-pub struct StatusBar {
-}
+pub struct StatusBar {}
 
 impl StatusBar {
     pub fn new() -> Self {
