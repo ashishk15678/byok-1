@@ -3,12 +3,10 @@ use gpui::{
     prelude::*, px, rgb,
 };
 use std::collections::HashSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 use crate::ui::workspace::OpenPath;
 
 use crate::config::{DIR_ICON, FILE_ICON};
-use crate::editor::texteditor::TextEditor;
 use crate::state::appstate::AppState;
 
 pub struct FileBrowser {
