@@ -3,19 +3,21 @@ use crate::editor::filebrowser::FileBrowser;
 use crate::editor::texteditor::TextEditor;
 use crate::state::appstate::AppState;
 use crate::ui::header::Header;
+use crate::ui::settings::SettingsView;
 use crate::workspace::WorkspaceItem;
 use gpui::prelude::*;
 use gpui::*;
 use serde::Deserialize;
 use std::path::PathBuf;
 
-// Imports at top needed: StatusBar
+use crate::ui::search_bar::{PerformSearch, SearchBar};
 use crate::ui::statusbar::StatusBar;
 
 pub struct MainScreen {
     pub items: Vec<WorkspaceItem>,
     pub active_item_index: usize,
     pub file_browser: Entity<FileBrowser>,
+    pub search_bar: SearchBar,
     pub show_browser: bool,
     pub show_info_panel: bool,
     pub focus_handle: FocusHandle,
@@ -107,6 +109,33 @@ impl gpui::Action for TriggerSearch {
     }
 }
 
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct ToggleSearch {
+    pub global: bool,
+}
+
+impl gpui::Action for ToggleSearch {
+    fn name(&self) -> &'static str {
+        "ToggleSearch"
+    }
+    fn name_for_type() -> &'static str {
+        "ToggleSearch"
+    }
+    fn build(value: serde_json::Value) -> gpui::Result<Box<dyn gpui::Action>> {
+        let action: ToggleSearch = serde_json::from_value(value)?;
+        Ok(Box::new(action))
+    }
+    fn boxed_clone(&self) -> Box<dyn gpui::Action> {
+        Box::new(self.clone())
+    }
+    fn partial_eq(&self, action: &dyn gpui::Action) -> bool {
+        action
+            .as_any()
+            .downcast_ref::<Self>()
+            .map_or(false, |a| self == a)
+    }
+}
+
 actions!(
     MainScreen,
     [
@@ -115,11 +144,13 @@ actions!(
         ToggleInfoPanel,
         OpenSettings,
         CloseTab,
-        ToggleFileSwitcher
+        ToggleFileSwitcher,
+        // ToggleSearch is not a simple unit action, needs registered deserializer if generic,
+        // but since we are manually binding, we can just use the struct if we implement Action.
+        // Wait, actions! macro handles unit structs primarily.
+        // I will use ToggleSearch above manually.
     ]
 );
-
-use crate::settings::SettingsView;
 
 impl MainScreen {
     pub fn new(
@@ -127,7 +158,7 @@ impl MainScreen {
         state: Entity<AppState>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let file_browser = cx.new(|cx| FileBrowser::new(cx));
+        let file_browser = cx.new(|cx| FileBrowser::new(state.clone(), cx));
 
         let initial_items = vec![WorkspaceItem::Editor(editor)];
 
@@ -135,6 +166,7 @@ impl MainScreen {
             items: initial_items,
             active_item_index: 0,
             file_browser,
+            search_bar: SearchBar::new(cx),
             show_browser: true,
             show_info_panel: true,
             focus_handle: cx.focus_handle(),
@@ -239,6 +271,47 @@ impl MainScreen {
         cx.notify();
     }
 
+    pub fn toggle_search(
+        &mut self,
+        action: &ToggleSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.search_bar.toggle(action.global, window, cx);
+    }
+
+    pub fn perform_search(
+        &mut self,
+        action: &PerformSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if action.global {
+            // Reuse existing trigger_search logic but with query
+            let query = action.query.clone();
+            let root_path = std::path::PathBuf::from(".");
+
+            let state = self.state.clone();
+            let executor = cx.background_executor().clone();
+            let pools = self.state.read(cx).pools.clone();
+
+            // TODO: Update state with results instead of just printing or detaching
+            executor
+                .spawn(async move {
+                    let results = crate::editor::search::perform_search(query, root_path, pools);
+                    println!("Search results: {:?}", results.len());
+                })
+                .detach();
+        } else {
+            // Local search
+            if let Some(WorkspaceItem::Editor(editor)) = self.items.get(self.active_item_index) {
+                editor.update(cx, |editor, cx| {
+                    editor.find_next(&action.query, cx);
+                });
+            }
+        }
+    }
+
     pub fn trigger_search(
         &mut self,
         _: &TriggerSearch,
@@ -252,8 +325,9 @@ impl MainScreen {
         let async_cx = cx.to_async();
         let executor = cx.background_executor().clone();
 
-        let background_task =
-            executor.spawn(async move { crate::editor::search::perform_search(query, root_path) });
+        let pools = self.state.read(cx).pools.clone();
+        let background_task = executor
+            .spawn(async move { crate::editor::search::perform_search(query, root_path, pools) });
 
         // cx.spawn(|_, _| async move {
         //     let results = background_task.await;
@@ -286,13 +360,17 @@ impl Render for MainScreen {
             .on_action(cx.listener(MainScreen::switch_tab))
             .on_action(cx.listener(MainScreen::close_tab))
             .on_action(cx.listener(MainScreen::toggle_file_switcher))
+            .on_action(cx.listener(MainScreen::toggle_file_switcher))
             .on_action(cx.listener(MainScreen::trigger_search))
+            .on_action(cx.listener(MainScreen::toggle_search))
+            .on_action(cx.listener(MainScreen::perform_search))
             .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
             .bg(rgb(0x252526))
             .text_color(PRIMARY_COLOR)
             .size_full()
             .flex()
             .flex_col()
+            .child(self.search_bar.render(window, cx)) // Render search bar below header (or above)
             .child(self.header.render(window, cx))
             .child(
                 div()

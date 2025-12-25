@@ -1,6 +1,7 @@
 use gpui::*;
 use std::path::PathBuf;
 use std::sync::Arc;
+use crate::pools::Pools;
 
 #[derive(Clone, Debug)]
 pub struct SearchResult {
@@ -13,6 +14,7 @@ pub struct SearchResult {
 pub fn perform_search(
     query: String,
     root_path: PathBuf,
+    pools: Arc<Pools>,
 ) -> Vec<SearchResult> {
     // Simulate heavy work / actual search
     let mut results = Vec::new();
@@ -20,23 +22,28 @@ pub fn perform_search(
         return results;
     }
 
-    if let Ok(entries) = std::fs::read_dir(&root_path) {
-        for entry in entries.flatten() {
-             let path = entry.path();
-             if path.is_file() {
-                 if let Ok(content) = std::fs::read_to_string(&path) {
-                     for (i, line) in content.lines().enumerate() {
-                         if line.contains(&query) {
-                             results.push(SearchResult {
-                                 path: path.clone(),
-                                 line: i + 1,
-                                 line_content: line.trim().to_string(),
-                             });
-                             if results.len() > 10 { break; } // limit
-                         }
-                     }
-                 }
-             }
+    let mut stack = vec![root_path];
+
+    while let Some(path) = stack.pop() {
+        if path.is_dir() {
+            if let Ok(entries) = pools.resources.list_dir(&path) {
+                for entry in entries.flatten() {
+                    stack.push(entry.path());
+                }
+            }
+        } else if path.is_file() {
+            if let Ok(content) = pools.resources.open_file(&path) {
+                for (i, line) in content.lines().enumerate() {
+                    if line.contains(&query) {
+                        results.push(SearchResult {
+                            path: path.clone(),
+                            line: i + 1,
+                            line_content: line.trim().to_string(),
+                        });
+                        if results.len() > 50 { return results; }
+                    }
+                }
+            }
         }
     }
 

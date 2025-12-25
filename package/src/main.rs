@@ -3,30 +3,30 @@ use crate::editor::texteditor::{
     Copy, Cut, NewFile, OpenFile, Paste, Redo, SaveFile, SaveFileAs, TextEditor, Undo,
 };
 use crate::state::appstate::AppState;
-use crate::ui::workspace::{CloseTab, MainScreen, OpenSettings, ToggleBrowser, ToggleFileSwitcher, ToggleInfoPanel, Quit};
+use crate::ui::workspace::{
+    CloseTab, MainScreen, OpenSettings, Quit, ToggleBrowser, ToggleFileSwitcher, ToggleInfoPanel,
+};
 use crate::utils::{bind_editor_action, bind_global_action};
 use gpui::{
-    App, Application, Bounds, Menu, MenuItem, WindowBounds, WindowOptions,
-    prelude::*, px, size,
+    App, Application, Bounds, Menu, MenuItem, WindowBounds, WindowOptions, prelude::*, px, size, KeyBinding,
 };
 use std::env;
 
-pub mod structs;
 pub mod config;
 pub mod editor;
 pub mod log;
-pub mod settings;
+pub mod pools;
 pub mod state;
+pub mod structs;
 pub mod tests;
+pub mod ui;
 pub mod utils;
 pub mod workspace;
-pub mod ui;
-
 fn main() {
     let _env: Vec<String> = env::args().collect();
     Application::new().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1000.), px(800.0)), cx);
-        
+
         let menu = Menu {
             name: APP_NAME.into(),
             items: vec![
@@ -73,9 +73,13 @@ fn main() {
                 // keybindings
                 bind_global_action(cx, "ctrl-b", ToggleBrowser);
                 bind_global_action(cx, "ctrl-l", ToggleInfoPanel);
-                bind_global_action(cx, "ctrl-shift-p", OpenSettings); 
-                bind_global_action(cx, "ctrl-,", OpenSettings); 
+                bind_global_action(cx, "ctrl-shift-p", OpenSettings);
+                bind_global_action(cx, "ctrl-,", OpenSettings);
                 bind_global_action(cx, "ctrl-p", ToggleFileSwitcher);
+                cx.bind_keys([
+                    KeyBinding::new("ctrl-f", crate::ui::workspace::ToggleSearch { global: false }, None),
+                    KeyBinding::new("ctrl-shift-f", crate::ui::workspace::ToggleSearch { global: true }, None),
+                ]);
 
                 bind_editor_action(cx, "ctrl-n", NewFile);
                 bind_editor_action(cx, "ctrl-o", OpenFile);

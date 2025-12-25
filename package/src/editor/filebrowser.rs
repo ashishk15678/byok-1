@@ -9,6 +9,7 @@ use crate::ui::workspace::OpenPath;
 
 use crate::config::{DIR_ICON, FILE_ICON};
 use crate::editor::texteditor::TextEditor;
+use crate::state::appstate::AppState;
 
 pub struct FileBrowser {
     root_path: PathBuf,
@@ -17,10 +18,11 @@ pub struct FileBrowser {
     // State for resizing
     width: f32,
     is_resizing: bool,
+    app_state: Entity<AppState>,
 }
 
 impl FileBrowser {
-    pub fn new(_cx: &mut Context<Self>) -> Self {
+    pub fn new(app_state: Entity<AppState>, _cx: &mut Context<Self>) -> Self {
         let root = PathBuf::from(".");
         let mut expanded = HashSet::new();
         expanded.insert(root.clone()); // Expand root by default
@@ -31,6 +33,7 @@ impl FileBrowser {
             expanded_paths: expanded,
             width: 256.0,
             is_resizing: false,
+            app_state,
         }
     }
 
@@ -57,8 +60,9 @@ impl FileBrowser {
         cx: &mut Context<Self>,
     ) -> Vec<impl IntoElement> {
         let mut elements = Vec::new();
+        let app_state = self.app_state.read(cx);
 
-        if let Ok(entries) = fs::read_dir(path) {
+        if let Ok(entries) = app_state.pools.resources.list_dir(path) {
             let mut files: Vec<PathBuf> =
                 entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
 

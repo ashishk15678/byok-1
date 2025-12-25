@@ -1,17 +1,21 @@
-use gpui::{div, px, rgb, IntoElement, ParentElement, Render, Styled, Window, Context, InteractiveElement, MouseButton};
+use gpui::{
+    Context, InteractiveElement, IntoElement, MouseButton, ParentElement, Render, Styled, Window,
+    div, px, rgb,
+};
 
-pub struct Header {
-    // We might pass callbacks for tab switching here?
-}
+pub struct Header {}
 
 impl Header {
     pub fn new() -> Self {
         Self {}
     }
 
-    pub fn render(&self, _window: &mut Window, _cx: &mut Context<crate::MainScreen>) -> impl IntoElement
-    {
-         div()
+    pub fn render(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<crate::MainScreen>,
+    ) -> impl IntoElement {
+        div()
             .h_10()
             .w_full()
             .bg(rgb(0x252526))
@@ -23,22 +27,18 @@ impl Header {
             .px_2()
             .child(
                 div()
-                    .text_xs()
-                    .text_color(rgb(0xcccccc))
-                    .child("TABS GO HERE")
-            )
-            .child(
-                div()
-                    .ml_auto()
                     .px_2()
                     .py_1()
-                    .bg(rgb(0x3c3c3c))
+                    .text_sm()
                     .rounded_md()
                     .cursor_pointer()
                     .child("Settings")
-                    .on_mouse_down(MouseButton::Left, _cx.listener(|_, _, window, cx| {
-                         window.dispatch_action(Box::new(crate::OpenSettings), cx);
-                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        _cx.listener(|_, _, window, cx| {
+                            window.dispatch_action(Box::new(crate::OpenSettings), cx);
+                        }),
+                    ),
             )
     }
 }

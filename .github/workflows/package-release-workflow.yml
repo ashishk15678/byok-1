@@ -6,7 +6,10 @@ on:
       - "v*"
     # branches:
     #   - fix-release-workflow
-
+  pull_request:
+    branches:
+      - main
+      # - dev
 jobs:
   build-and-package:
     name: Build & Package (${{ matrix.platform }})
