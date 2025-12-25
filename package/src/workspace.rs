@@ -1,6 +1,6 @@
 use crate::editor::texteditor::TextEditor;
 use crate::ui::settings::SettingsView;
-use gpui::{AnyElement, Context, Element, Entity, IntoElement, Render, VisualContext, Window};
+use gpui::{AnyElement, Context, Entity, IntoElement, Window};
 
 pub enum WorkspaceItem {
     Editor(Entity<TextEditor>),

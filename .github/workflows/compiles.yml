@@ -2,14 +2,10 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      # - dev
-      - fix-release-workflow
+    # This triggers on every push to any branch
   pull_request:
     branches:
       - main
-      # - dev
       - fix-release-workflow
 
 permissions:
@@ -37,18 +33,20 @@ jobs:
         working-directory: package
 
     steps:
-      # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup Rust
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-          override: true
+      # IMPORTANT: Linux needs specific libraries to compile GPUI/GUI apps
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libvulkan-dev libasound2-dev libwayland-dev
 
-      # 3. Cache cargo
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -56,18 +54,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             package/target
+          # Use a dynamic key so cache refreshes when lockfile changes
           key: cargo-${{ runner.os }}-${{ hashFiles('package/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
 
-      # removed formatting because default rust based formatting is different than many editors/IDEs
-      # 4. Clippy
       - name: Run Clippy
-        # uses: actions-rs/clippy-check@v1
-        run: cargo clippy --all-targets --all-features
-        # with:
-        #   token: ${{ secrets.GITHUB_TOKEN }}
-        #   args: --all-targets --all-features
-        #   fail-on-warnings: false
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
-      # 5. Compile
       - name: Compile
         run: cargo build

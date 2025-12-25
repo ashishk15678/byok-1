@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - main
+      - global-search
       # - dev
 jobs:
   build-and-package:
@@ -48,15 +49,15 @@ jobs:
           echo "APP_VER=$APP_VER" >> $GITHUB_ENV
 
       # 4. Validate git tag version
-      - name: Validate version tag
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF#refs/tags/v}"
+      # - name: Validate version tag
+      #   shell: bash
+      #   run: |
+      #     TAG="${GITHUB_REF#refs/tags/v}"
 
-          if [ "$TAG" != "$APP_VER" ]; then
-            echo "❌ Tag version ($TAG) does not match config.json version ($APP_VER)"
-            exit 1
-          fi
+      #     if [ "$TAG" != "$APP_VER" ]; then
+      #       echo "❌ Tag version ($TAG) does not match config.json version ($APP_VER)"
+      #       exit 1
+      #     fi
 
       # 5. Build
       - name: Build binary

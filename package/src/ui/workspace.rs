@@ -283,7 +283,7 @@ impl MainScreen {
     pub fn perform_search(
         &mut self,
         action: &PerformSearch,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if action.global {
@@ -291,7 +291,7 @@ impl MainScreen {
             let query = action.query.clone();
             let root_path = std::path::PathBuf::from(".");
 
-            let state = self.state.clone();
+            let _state = self.state.clone();
             let executor = cx.background_executor().clone();
             let pools = self.state.read(cx).pools.clone();
 
@@ -315,18 +315,18 @@ impl MainScreen {
     pub fn trigger_search(
         &mut self,
         _: &TriggerSearch,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let state = self.state.clone();
+        let _state = self.state.clone();
         let query = "struct".to_string(); // Hardcoded for demo
         let root_path = std::path::PathBuf::from("src"); // Search in src
 
-        let async_cx = cx.to_async();
+        let _async_cx = cx.to_async();
         let executor = cx.background_executor().clone();
 
         let pools = self.state.read(cx).pools.clone();
-        let background_task = executor
+        let _background_task = executor
             .spawn(async move { crate::editor::search::perform_search(query, root_path, pools) });
 
         // cx.spawn(|_, _| async move {
